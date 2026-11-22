@@ -2,7 +2,7 @@ import json, os, time
 from pathlib import Path
 import redis
 from .db import connect, migrate, wait_for_db
-from .algorithm import stl_rolling_forecast
+from .algorithm import ALGORITHM_LABELS, ALGORITHM_STL, run_forecast
 
 REDIS_URL=os.environ['REDIS_URL']; QUEUE='airport:forecast'
 r=redis.Redis.from_url(REDIS_URL, decode_responses=True)
@@ -14,10 +14,15 @@ def process(forecast_id):
         conn.execute("UPDATE peak_forecasts SET status='running', attempts=attempts+1, updated_at=now() WHERE id=%s", (forecast_id,))
         wave=conn.execute('SELECT * FROM flight_waves WHERE id=%s',(row['wave_id'],)).fetchone()
         points=conn.execute("SELECT counted_at,bag_count FROM belt_counts WHERE wave_id=%s AND status='accepted' ORDER BY counted_at", (row['wave_id'],)).fetchall()
+        version=row['algorithm_version']
         try:
-            result=stl_rolling_forecast(points, row['window_size'])
-            conn.execute("UPDATE peak_forecasts SET status='ready', peak_bags=%s, forecast_at=now(), seasonal_strength=%s, trend_per_hour=%s, snapshot_hash=%s, parameters=%s::jsonb, result=%s::jsonb, updated_at=now() WHERE id=%s", (result['peak_bags'],result['seasonal_strength'],result['trend_per_hour'],result['snapshot_hash'],json.dumps({'method':'STL decomposition + rolling linear regression','seed':1072,'period':result['period']}),json.dumps(result),forecast_id))
-            conn.execute("UPDATE flight_waves SET status='forecasted' WHERE id=%s", (row['wave_id'],))
+            result=run_forecast(version, points, row['window_size'])
+            parameters={'method': ALGORITHM_LABELS[version], 'algorithm_version': version,
+                        'purpose': row['purpose'], 'seed': 1072, 'period': result['period']}
+            conn.execute("UPDATE peak_forecasts SET status='ready', peak_bags=%s, forecast_at=now(), seasonal_strength=%s, trend_per_hour=%s, snapshot_hash=%s, parameters=%s::jsonb, result=%s::jsonb, failure_reason=NULL, updated_at=now() WHERE id=%s", (result['peak_bags'],result['seasonal_strength'],result['trend_per_hour'],result['snapshot_hash'],json.dumps(parameters, ensure_ascii=False),json.dumps(result),forecast_id))
+            # 试算结果不进入正式运行链路，不改变波次状态
+            if row['purpose'] != 'trial':
+                conn.execute("UPDATE flight_waves SET status='forecasted' WHERE id=%s", (row['wave_id'],))
         except Exception as exc:
             conn.execute("UPDATE peak_forecasts SET status='failed', failure_reason=%s, updated_at=now() WHERE id=%s", (str(exc), forecast_id))
         conn.commit()

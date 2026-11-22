@@ -10,7 +10,7 @@ def readiness_board():
                       AND s.status='confirmed' AND s.start_at<=f.forecast_at AND f.forecast_at<s.end_at), 0) AS covered
         FROM flight_waves w LEFT JOIN LATERAL (
             SELECT peak_bags,forecast_at FROM peak_forecasts WHERE wave_id=w.id
-              AND status IN ('ready','published') ORDER BY id DESC LIMIT 1
+              AND status IN ('ready','published') AND purpose='operational' ORDER BY id DESC LIMIT 1
         ) f ON TRUE
         WHERE w.status<>'closed' ORDER BY w.arrival_start,w.code LIMIT 80
     """)

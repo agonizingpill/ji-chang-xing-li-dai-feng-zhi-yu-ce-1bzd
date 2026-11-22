@@ -11,7 +11,7 @@ SELECT w.code,w.terminal,w.status AS wave_status,w.cancellation_state,f.id,f.sta
             WHEN w.cancellation_state IN ('cancelled_marked','diverted_marked') AND f.status='published' THEN '复核遗留预测发布'
             WHEN w.cancellation_state IN ('cancelled_marked','diverted_marked') THEN '维护取消或备降记录'
             ELSE '正常波次' END
-FROM flight_waves w LEFT JOIN peak_forecasts f ON f.id=(SELECT MAX(p.id) FROM peak_forecasts p WHERE p.wave_id=w.id)
+FROM flight_waves w LEFT JOIN peak_forecasts f ON f.id=(SELECT MAX(p.id) FROM peak_forecasts p WHERE p.wave_id=w.id AND p.purpose='operational')
 ORDER BY CASE WHEN w.cancellation_state='normal' THEN 1 ELSE 0 END,w.arrival_start,w.code
 """,
     ),

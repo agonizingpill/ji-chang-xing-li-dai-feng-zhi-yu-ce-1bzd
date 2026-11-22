@@ -14,7 +14,7 @@ SELECT f.id::text AS source_key,CONCAT(w.code,' · 预测 ',f.id) AS subject,
        CASE WHEN f.peak_bags IS NOT NULL AND f.peak_bags<=10*COALESCE(SUM(s.capacity),0) THEN 'covered' ELSE 'shortfall' END AS readiness
 FROM peak_forecasts f JOIN flight_waves w ON w.id=f.wave_id LEFT JOIN staff_shifts s ON s.wave_id=f.wave_id
  AND s.status='confirmed' AND s.start_at<=f.forecast_at AND f.forecast_at<s.end_at
-WHERE f.status IN ('ready','published') GROUP BY f.id,w.code
+WHERE f.status IN ('ready','published') AND f.purpose='operational' GROUP BY f.id,w.code
 """,
     },
 }

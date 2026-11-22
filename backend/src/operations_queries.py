@@ -44,7 +44,7 @@ SELECT w.code,f.id,f.forecast_at,f.peak_bags,10*COALESCE(SUM(s.capacity),0),
        GREATEST(f.peak_bags-10*COALESCE(SUM(s.capacity),0),0) AS shortfall
 FROM peak_forecasts f JOIN flight_waves w ON w.id=f.wave_id LEFT JOIN staff_shifts s ON s.wave_id=w.id
  AND s.status='confirmed' AND s.start_at<=f.forecast_at AND f.forecast_at<s.end_at
-WHERE f.status IN ('ready','published') AND f.forecast_at IS NOT NULL AND f.peak_bags IS NOT NULL
+WHERE f.status IN ('ready','published') AND f.purpose='operational' AND f.forecast_at IS NOT NULL AND f.peak_bags IS NOT NULL
 GROUP BY w.code,f.id ORDER BY shortfall DESC,f.id
 """,
     ),

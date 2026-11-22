@@ -45,6 +45,27 @@ def migrate():
           window_size INT, snapshot_hash TEXT, parameters JSONB NOT NULL DEFAULT '{}'::jsonb, result JSONB NOT NULL DEFAULT '{}'::jsonb,
           failure_reason TEXT, created_by INT REFERENCES users(id), attempts INT NOT NULL DEFAULT 0, created_at TIMESTAMPTZ NOT NULL DEFAULT now(), updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
         );
+        ALTER TABLE peak_forecasts ADD COLUMN IF NOT EXISTS algorithm_version TEXT NOT NULL DEFAULT 'stl_rolling';
+        ALTER TABLE peak_forecasts ADD COLUMN IF NOT EXISTS purpose TEXT NOT NULL DEFAULT 'operational';
+        DO $$ BEGIN
+          ALTER TABLE peak_forecasts ADD CONSTRAINT peak_forecasts_algorithm_check CHECK (algorithm_version IN ('stl_rolling','recent_four_mean'));
+        EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+        DO $$ BEGIN
+          ALTER TABLE peak_forecasts ADD CONSTRAINT peak_forecasts_purpose_check CHECK (purpose IN ('operational','trial'));
+        EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+        CREATE TABLE IF NOT EXISTS algorithm_settings (
+          id INT PRIMARY KEY DEFAULT 1 CHECK (id=1),
+          effective_version TEXT NOT NULL CHECK (effective_version IN ('stl_rolling','recent_four_mean')),
+          switched_by INT REFERENCES users(id), switched_at TIMESTAMPTZ NOT NULL DEFAULT now()
+        );
+        INSERT INTO algorithm_settings(id,effective_version) VALUES (1,'stl_rolling') ON CONFLICT (id) DO NOTHING;
+        CREATE TABLE IF NOT EXISTS algorithm_trials (
+          id SERIAL PRIMARY KEY, wave_id INT NOT NULL REFERENCES flight_waves(id) ON DELETE CASCADE,
+          designated_by INT REFERENCES users(id), designated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+          stl_forecast_id INT REFERENCES peak_forecasts(id) ON DELETE SET NULL,
+          recent_four_forecast_id INT REFERENCES peak_forecasts(id) ON DELETE SET NULL,
+          UNIQUE(wave_id)
+        );
         CREATE TABLE IF NOT EXISTS staff_shifts (
           id SERIAL PRIMARY KEY, shift_code TEXT UNIQUE NOT NULL, wave_id INT REFERENCES flight_waves(id), start_at TIMESTAMPTZ NOT NULL,
           end_at TIMESTAMPTZ NOT NULL, planned_staff INT NOT NULL CHECK (planned_staff >= 0), capacity INT NOT NULL CHECK (capacity > 0),
